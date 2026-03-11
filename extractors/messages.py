@@ -25,6 +25,7 @@ import subprocess
 from datetime import datetime
 
 from iOSbackup import iOSbackup
+from extractors._contacts import load_index as _load_contacts_index, contact_link as _contact_link
 
 # Seconds between Unix epoch (1970-01-01) and Apple epoch (2001-01-01)
 _APPLE_EPOCH_OFFSET = 978307200
@@ -179,7 +180,8 @@ def _load_conversations(mdb):
     return list(merged.values())
 
 
-def extract(backup: iOSbackup, target_folder: str) -> list:
+def extract(backup: iOSbackup, target_folder: str, convert_heic: bool = False,
+            contacts_folder: str = None) -> list:
     """Extract all conversations from backup to target_folder.
 
     Parameters
@@ -188,6 +190,13 @@ def extract(backup: iOSbackup, target_folder: str) -> list:
         An open, authenticated backup instance.
     target_folder : str
         Root directory for output. Created if it does not exist.
+    convert_heic : bool
+        Whether to convert HEIC/HEIF attachments to JPEG (default: False).
+        Requires macOS ``sips`` to be available.
+    contacts_folder : str, optional
+        Path to a contacts output folder produced by extractors/contacts.py.
+        When provided, conversation identifiers are resolved to display names
+        and linked to the corresponding contact page.
 
     Returns
     -------
@@ -206,6 +215,9 @@ def extract(backup: iOSbackup, target_folder: str) -> list:
     mdb.row_factory = sqlite3.Row
     conversations = _load_conversations(mdb)
     mdb.close()
+
+    contacts_index = _load_contacts_index(contacts_folder)
+    contacts_abs = os.path.abspath(contacts_folder) if contacts_folder else None
 
     for conv in conversations:
         label      = conv['display_name'] or conv['identifier']
@@ -228,7 +240,7 @@ def extract(backup: iOSbackup, target_folder: str) -> list:
                         targetName=name,
                     )
                     full_path = os.path.join(att_folder, name)
-                    if os.path.splitext(name)[1].lower() in _HEIC_EXTENSIONS:
+                    if convert_heic and os.path.splitext(name)[1].lower() in _HEIC_EXTENSIONS:
                         full_path = _convert_heic(full_path)
                         name = os.path.basename(full_path)
                         att['mime_type'] = 'image/jpeg'
@@ -241,12 +253,20 @@ def extract(backup: iOSbackup, target_folder: str) -> list:
         with open(json_path, 'w', encoding='utf-8') as f:
             json.dump(conv, f, indent=2, default=str)
 
+        # Resolve contact link for this conversation's header
+        entry = contacts_index.get(conv['identifier'])
+        contact_url = None
+        if entry and contacts_abs:
+            contact_url = _contact_link(contacts_abs, entry, os.path.abspath(folder))
+            if not conv['display_name']:
+                conv['display_name'] = entry['contact'].get('name') or ''
+
         # Write HTML viewer
-        _render_html(conv, os.path.join(folder, 'conversation.html'))
+        _render_html(conv, os.path.join(folder, 'conversation.html'), contact_url)
 
         print(f"  ✓ {label} ({len(conv['messages'])} messages)")
 
-    _render_index(conversations, target_folder)
+    _render_index(conversations, target_folder, contacts_index, contacts_abs)
     print(f"\n{len(conversations)} conversations extracted to {target_folder}/")
     return conversations
 
@@ -273,6 +293,8 @@ header {
     flex-shrink: 0;
 }
 header .title { font-weight: 600; font-size: 17px; }
+a.title-link { color: inherit; text-decoration: none; }
+a.title-link:hover { color: #0b84fe; }
 header .subtitle { font-size: 12px; color: #8e8e93; margin-top: 2px; }
 .messages {
     flex: 1;
@@ -353,9 +375,15 @@ def _attachment_html(att):
     return f'<div class="att-file"><a href="{path}">{_escape(name)}</a></div>'
 
 
-def _render_html(conv, output_path):
+def _render_html(conv, output_path, contact_url=None):
     title    = conv['display_name'] or conv['identifier']
     subtitle = ', '.join(conv['participants'])
+
+    # Header: link the title to the contact page if available
+    if contact_url:
+        title_html = f'<a href="{contact_url}" class="title-link">{_escape(title)}</a>'
+    else:
+        title_html = _escape(title)
 
     rows = []
     last_date = None
@@ -407,7 +435,7 @@ def _render_html(conv, output_path):
 </head>
 <body>
   <header>
-    <div class="title">{_escape(title)}</div>
+    <div class="title">{title_html}</div>
     <div class="subtitle">{_escape(subtitle)}</div>
   </header>
   <div class="messages">
@@ -420,19 +448,47 @@ def _render_html(conv, output_path):
         f.write(html)
 
 
-def _render_index(conversations, target_folder):
+def _render_index(conversations, target_folder, contacts_index=None, contacts_abs=None):
+    index_dir = os.path.abspath(target_folder)
+
+    # Sort by most recent message, newest first
+    def _last_date(conv):
+        dates = [m['date'] for m in conv['messages'] if m['date']]
+        return max(dates) if dates else ''
+    sorted_convs = sorted(conversations, key=_last_date, reverse=True)
+
     items = []
-    for conv in conversations:
-        label  = _escape(conv['display_name'] or conv['identifier'])
-        folder = _sanitize_folder(conv['identifier'])
-        count  = len(conv['messages'])
-        dates  = [m['date'] for m in conv['messages'] if m['date']]
-        last   = _format_date(max(dates)) if dates else '—'
+    for conv in sorted_convs:
+        identifier = conv['identifier']
+        folder     = _sanitize_folder(identifier)
+        count      = len(conv['messages'])
+        dates      = [m['date'] for m in conv['messages'] if m['date']]
+        last       = _format_date(max(dates)) if dates else '—'
+
+        # Resolve display name from contacts
+        entry        = (contacts_index or {}).get(identifier)
+        display_name = conv['display_name']
+        if not display_name and entry:
+            display_name = entry['contact'].get('name') or ''
+
+        if display_name and display_name != identifier:
+            name_html = f'{_escape(display_name)} <span class="ident">{_escape(identifier)}</span>'
+        else:
+            name_html = _escape(identifier)
+
+        # Contact link as a separate button, not nested inside the conversation link
+        contact_btn = ''
+        if entry and contacts_abs:
+            link = _contact_link(contacts_abs, entry, index_dir)
+            contact_btn = f'<a href="{link}" class="contact-btn" title="View contact">i</a>'
+
         items.append(f"""
-<a href="{folder}/conversation.html" class="conv">
-  <div class="name">{label}</div>
-  <div class="meta">{count} messages &middot; last {last}</div>
-</a>""")
+<div class="conv-row">
+  <a href="{folder}/conversation.html" class="conv">
+    <div class="name">{name_html}</div>
+    <div class="meta">{count} messages &middot; last {last}</div>
+  </a>{contact_btn}
+</div>""")
 
     html = f"""<!DOCTYPE html>
 <html lang="en">
@@ -446,11 +502,19 @@ def _render_index(conversations, target_folder):
             background: #000; color: #fff; }}
     header {{ background: #1c1c1e; border-bottom: 1px solid #2c2c2e;
               padding: 20px 16px; font-size: 28px; font-weight: 700; }}
-    .conv {{ display: block; padding: 14px 16px; border-bottom: 1px solid #2c2c2e;
-             text-decoration: none; color: inherit; }}
+    .conv-row {{ display: flex; align-items: center; border-bottom: 1px solid #2c2c2e; }}
+    .conv {{ flex: 1; display: block; padding: 14px 16px;
+             text-decoration: none; color: inherit; cursor: pointer; }}
     .conv:hover {{ background: #1c1c1e; }}
     .name {{ font-size: 17px; font-weight: 500; }}
+    .name .ident {{ font-size: 13px; font-weight: 400; color: #8e8e93; margin-left: 6px; }}
     .meta {{ font-size: 13px; color: #8e8e93; margin-top: 3px; }}
+    .contact-btn {{ display: flex; align-items: center; justify-content: center;
+                    width: 24px; height: 24px; margin-right: 16px; border-radius: 50%;
+                    background: #2c2c2e; color: #8e8e93; font-size: 13px;
+                    font-style: italic; font-family: serif; text-decoration: none;
+                    flex-shrink: 0; }}
+    .contact-btn:hover {{ background: #0b84fe; color: #fff; }}
   </style>
 </head>
 <body>
@@ -476,7 +540,12 @@ def main():
     parser.add_argument('--udid',       required=True, help='Device UDID')
     parser.add_argument('--derivedkey', default=None,  help='Derived decryption key; prompts for password if omitted')
     parser.add_argument('--backuproot', default=None,  help='Backup root folder; uses platform default if omitted')
-    parser.add_argument('--output',     default='messages', help='Output folder (default: messages)')
+    parser.add_argument('--output',          default='messages', help='Output folder (default: messages)')
+    parser.add_argument('--convert-heic', action='store_true',
+                        help='Convert HEIC/HEIF attachments to JPEG (requires macOS sips)')
+    parser.add_argument('--contacts', default=None, metavar='DIR',
+                        help='Path to contacts output folder (from extractors/contacts.py); '
+                             'enables display names and contact links in the index')
     args = parser.parse_args()
 
     backup = iOSbackup(
@@ -484,7 +553,8 @@ def main():
         derivedkey=args.derivedkey,
         backuproot=args.backuproot,
     )
-    extract(backup, args.output)
+    extract(backup, args.output, convert_heic=args.convert_heic,
+            contacts_folder=args.contacts)
 
 
 if __name__ == '__main__':
