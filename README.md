@@ -288,24 +288,37 @@ for id in [s for s in list(b.manifest['Applications'].keys()) if "telegra" in s]
 
 ## Security
 
-Several hardening measures are in place to protect sensitive data:
+This fork fixes several security and correctness issues present in the original [iOSbackup](https://github.com/avibrazil/iOSbackup) and [NSKeyedUnArchiver](https://github.com/avibrazil/NSKeyedUnArchiver) libraries.
 
-**Password handling**
-- The constructor prompts for your backup password via `getpass` when no `derivedkey` is supplied. The password never appears in your shell history, REPL transcript, or log output.
+### iOSbackup fixes
+
+**Password handling** (original: cleartext password persisted in memory)
+- The constructor now prompts for your backup password via `getpass` when no `derivedkey` is supplied. The password never appears in your shell history, REPL transcript, or log output.
 - Internally the password is held in a mutable `bytearray` and zeroed immediately after key derivation, including the intermediate PBKDF2 round. Python's immutable `str` type cannot be zeroed and may persist in memory or appear in stack traces — this approach avoids that.
 - The `cleartextpassword` parameter still exists for scripted/non-interactive use, but should be avoided wherever possible.
 
-**Decryption key redacted from `repr`**
-- `print(b)` no longer prints the decryption key. Call `b.getDecryptionKey()` explicitly when you need it.
+**Decryption key redacted from `repr`** (original: full key printed by `__repr__`)
+- The original library's `repr(b)` / `print(b)` emitted the full master decryption key in hex, which could end up in terminal output, log files, or crash reports. This key decrypts the entire backup. It is now redacted — call `b.getDecryptionKey()` explicitly when you need it.
 
-**SQL injection prevention**
+**SQL injection prevention** (original: string interpolation in SQL queries)
 - `getFolderDecryptedCopy()` previously built SQL queries by string interpolation, which would allow a crafted `relativePath`, `includeDomains`, or `includeFiles` value to inject arbitrary SQL. All filters now use parameterised queries.
 
-**Path traversal prevention**
-- `getFolderDecryptedCopy()` validates each output path against the target root before writing. A backup with a crafted `domain` or `relativePath` value (e.g. containing `../`) cannot write files outside the intended destination folder.
+**Path traversal prevention** (original: no output path validation)
+- The original library joined `domain` and `relativePath` from `Manifest.db` directly into the output path with no boundary check. A crafted backup containing `domain = "../../"` or a similar `relativePath` could write files outside the intended target folder. `getFolderDecryptedCopy()` now validates each output path against the target root before writing.
 
-**Temporary file cleanup**
-- The decrypted `Manifest.db` is written to a temporary file with `delete=False` so it survives the initial open. An `atexit` handler is registered at creation time to ensure the file is deleted even if the process exits abnormally (e.g. unhandled exception, `sys.exit()`). The explicit `close()` method and `__del__` remain as the primary cleanup path.
+**Temporary file cleanup** (original: decrypted `Manifest.db` could persist after crash)
+- The original library used `tempfile.NamedTemporaryFile(delete=False)` with cleanup depending solely on `__del__`, which Python does not guarantee on crash, `SIGKILL`, or interpreter exit. An `atexit` handler is now registered at creation time to ensure the file is deleted even if the process exits abnormally. The explicit `close()` method and `__del__` remain as the primary cleanup path.
+
+### NSKeyedUnArchiver fixes
+
+**Bare `except:` swallowed all exceptions**
+- The original code used a bare `except:` which catches `KeyboardInterrupt`, `SystemExit`, `MemoryError`, etc., masking real failures. Replaced with specific exception types (`plistlib.InvalidFileException`, `ValueError`, `KeyError`).
+
+**Debug `print()` leaked data to stdout**
+- An unconditional `print()` statement dumped arbitrary plist values — potentially sensitive backup data — to stdout. Replaced with `logging.debug()`.
+
+**Logic bug: `finished` flag reset mid-loop**
+- Inside the UID-resolution loop, a `finished=True` assignment in the `elif dict/list` branch could reset the flag set by an earlier `plistlib.UID` key in the same pass. This caused the while-loop to exit before all UIDs were resolved, leaving unresolved `plistlib.UID` objects in the output. Fixed by removing the premature reset.
 
 ## Apple-native Python 3 Installation on Macs
 
