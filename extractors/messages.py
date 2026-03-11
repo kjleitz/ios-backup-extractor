@@ -64,7 +64,6 @@ def _convert_heic(path):
             capture_output=True,
         )
         if result.returncode == 0:
-            os.remove(path)
             return jpeg_path
     except FileNotFoundError:
         pass  # sips not available (non-macOS)

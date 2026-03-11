@@ -47,7 +47,7 @@ Source = "https://github.com/kjleitz/ios-backup-extractor"
 Issues = "https://github.com/kjleitz/ios-backup-extractor/issues/new/choose"
 
 [tool.setuptools.packages.find]
-include = ["iOSbackup*", "NSKeyedUnArchiverLocal*"]
+include = ["iOSbackup*", "NSKeyedUnArchiverLocal*", "extractors*"]
 
 [tool.setuptools.dynamic]
 version = {attr = "iOSbackup.__version__"}
