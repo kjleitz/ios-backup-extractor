@@ -1,0 +1,53 @@
+[project]
+name = "iOSbackup"
+description = "Reads and extracts files from password-encrypted iOS backups"
+readme = "README.md"
+license-files = [ "LICENSE" ]
+requires-python = ">=3.7"
+authors = [
+    { name = "Avi Alkalay", email = "avibrazil@gmail.com" },
+]
+dynamic = ["version"]
+
+dependencies = [
+    "NSKeyedUnArchiver-local @ file:../NSKeyedUnArchiver-local",
+    "pycryptodome",
+]
+
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+    "Development Status :: 4 - Beta",
+    "Environment :: MacOS X",
+    "Environment :: Console",
+    "Environment :: Win32 (MS Windows)",
+    "Intended Audience :: Developers",
+    "Intended Audience :: End Users/Desktop",
+    "Intended Audience :: Legal Industry",
+    "Intended Audience :: Telecommunications Industry",
+    "License :: OSI Approved :: GNU Library or Lesser General Public License (LGPL)",
+    "Operating System :: MacOS",
+    "Operating System :: iOS",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX",
+    "Operating System :: Unix",
+    "Topic :: Database",
+    "Topic :: Security :: Cryptography",
+    "Topic :: Software Development :: Embedded Systems",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: System :: Archiving :: Backup",
+    "Topic :: System :: Recovery Tools",
+]
+
+[project.urls]
+Homepage = "https://github.com/avibrazil/iOSbackup"
+Source = "https://github.com/avibrazil/iOSbackup"
+Issues = "https://github.com/avibrazil/iOSbackup/issues/new/choose"
+Pypi = "https://pypi.org/project/iOSbackup"
+
+[tool.setuptools.dynamic]
+version = {attr = "iOSbackup.__version__"}
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"

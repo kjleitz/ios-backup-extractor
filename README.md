@@ -21,13 +21,15 @@ Thank you in advance
 
 ## Installation
 
+Use a virtual environment to keep dependencies isolated:
+
 ```shell
-pip3 install iOSbackup --user
+python3 -m venv .venv
+source .venv/bin/activate   # on Windows: .venv\Scripts\activate
+pip install iOSbackup
 ```
 
-On macOS, get native Python 3 from Apple with command `xcode-select --install`. Read my [guide to install Apple official Python 3 distribution](https://avi.alkalay.net/2019/12/macos-jupyter-data-science-no-anaconda.html) for more details.
-
-`iOSbackup` requires other two packages: `biplist` and `pycryptodome` that will be [installed automatically by `pip`](https://pypi.org/project/iOSbackup/).
+`iOSbackup` requires `pycryptodome`, which will be installed automatically by `pip`.
 
 `pycryptodome` has an API compatible with older `pycrypto`, which should also work with `iOSbackup`. But `pycryptodome` is more well maintained and easier to install on Windows and macOS.
 
@@ -55,40 +57,36 @@ On macOS, get native Python 3 from Apple with command `xcode-select --install`. 
 
 ### Open a device backup
 
-With your password (a slow and compute-intensive task):
+Simply pass the UDID — you will be prompted for the password securely (it will not appear in your shell history or REPL transcript):
 ```python
->>> b=iOSbackup(
-	udid="00456030-000E4412342802E",
-	cleartextpassword="mypassword"
-)
+>>> b = iOSbackup(udid="00456030-000E4412342802E")
+Backup password:
 ```
-Instead of a clear text password, use a derived key that can be seen into the instantiated object:
+
+Key derivation is slow by design (it's a PBKDF2 stretch). Once complete, save the derived key so you never have to enter your password again:
 ```python
->>> b=iOSbackup(
-	udid="00456030-000E4412342802E",
-	cleartextpassword="mypassword"
-)
->>> print(b)
-…
-decryptionKey: dd6b6123494c5dbdff7804321fe43ffe1babcdb6074014afedc7cb47f351524
-…
+>>> b.getDecryptionKey()
+'dd6b6123494c5dbdff7804321fe43ffe1babcdb6074014afedc7cb47f351524'
 ```
-From now on use your derived key instead of your clear text password to not expose it and because it is much faster:
+
+Store that key somewhere safe. On subsequent runs, pass it directly — this is both faster and avoids handling your raw password:
 ```python
->>> b=iOSbackup(
-	udid="00456030-000E4412342802E",
-	derivedkey="dd6b6123494c5dbdff7804321fe43ffe1babcdb6074014afedc7cb47f351524"
-)
+>>> b = iOSbackup(
+...     udid="00456030-000E4412342802E",
+...     derivedkey="dd6b6123494c5dbdff7804321fe43ffe1babcdb6074014afedc7cb47f351524"
+... )
 ```
+
+> **Note:** `print(b)` no longer displays the decryption key — call `b.getDecryptionKey()` explicitly when you need it.
 ### Linux virtual machine accessing iOS backup on a macOS host
 
 Forcing a backup folder, useful when reading backups on Linux, where there is no standard for backup folders:
 ```python
->>> b=iOSbackup(
-	udid="00456030-000E4412342802E",
-	cleartextpassword="mypassword",
-	backuproot='/media/sf_username/Library/Application Support/MobileSync/Backup'
-)
+>>> b = iOSbackup(
+...     udid="00456030-000E4412342802E",
+...     backuproot='/media/sf_username/Library/Application Support/MobileSync/Backup'
+... )
+Backup password:
 ```
 For this to work on a Linux virtual machine accessing a VirtualBox-shared folder, you'll have to grant full disk access to your hypervisor (VirtualBox etc).
 On macOS, go to *System Preferences* ➔ *Security & Privacy* ➔ *Privacy* ➔ *Full Disk Access* and enable access to your hypervisor (VirtualBox etc).
@@ -295,6 +293,27 @@ for id in [s for s in list(b.manifest['Applications'].keys()) if "telegra" in s]
     for prefix in ["AppDomain", "AppDomainGroup", "AppDomainPlugin"]:
         b.getFolderDecryptedCopy(includeDomains=prefix + '-' + id)
 ```
+
+## Security
+
+Several hardening measures are in place to protect sensitive data:
+
+**Password handling**
+- The constructor prompts for your backup password via `getpass` when no `derivedkey` is supplied. The password never appears in your shell history, REPL transcript, or log output.
+- Internally the password is held in a mutable `bytearray` and zeroed immediately after key derivation, including the intermediate PBKDF2 round. Python's immutable `str` type cannot be zeroed and may persist in memory or appear in stack traces — this approach avoids that.
+- The `cleartextpassword` parameter still exists for scripted/non-interactive use, but should be avoided wherever possible.
+
+**Decryption key redacted from `repr`**
+- `print(b)` no longer prints the decryption key. Call `b.getDecryptionKey()` explicitly when you need it.
+
+**SQL injection prevention**
+- `getFolderDecryptedCopy()` previously built SQL queries by string interpolation, which would allow a crafted `relativePath`, `includeDomains`, or `includeFiles` value to inject arbitrary SQL. All filters now use parameterised queries.
+
+**Path traversal prevention**
+- `getFolderDecryptedCopy()` validates each output path against the target root before writing. A backup with a crafted `domain` or `relativePath` value (e.g. containing `../`) cannot write files outside the intended destination folder.
+
+**Temporary file cleanup**
+- The decrypted `Manifest.db` is written to a temporary file with `delete=False` so it survives the initial open. An `atexit` handler is registered at creation time to ensure the file is deleted even if the process exits abnormally (e.g. unhandled exception, `sys.exit()`). The explicit `close()` method and `__del__` remain as the primary cleanup path.
 
 ## Apple-native Python 3 Installation on Macs
 
