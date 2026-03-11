@@ -1,16 +1,15 @@
 [project]
-name = "iOSbackup"
+name = "ios-backup-extractor"
 description = "Reads and extracts files from password-encrypted iOS backups"
 readme = "README.md"
 license-files = [ "LICENSE" ]
 requires-python = ">=3.7"
 authors = [
-    { name = "Avi Alkalay", email = "avibrazil@gmail.com" },
+    { name = "Keegan Leitz", email = "kjleitz@gmail.com" },
 ]
 dynamic = ["version"]
 
 dependencies = [
-    "NSKeyedUnArchiver-local @ file:../NSKeyedUnArchiver-local",
     "pycryptodome",
 ]
 
@@ -25,7 +24,7 @@ classifiers = [
     "Intended Audience :: End Users/Desktop",
     "Intended Audience :: Legal Industry",
     "Intended Audience :: Telecommunications Industry",
-    "License :: OSI Approved :: GNU Library or Lesser General Public License (LGPL)",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
     "Operating System :: MacOS",
     "Operating System :: iOS",
     "Operating System :: Microsoft :: Windows",
@@ -43,13 +42,12 @@ classifiers = [
 test = ["pytest"]
 
 [project.urls]
-Homepage = "https://github.com/avibrazil/iOSbackup"
-Source = "https://github.com/avibrazil/iOSbackup"
-Issues = "https://github.com/avibrazil/iOSbackup/issues/new/choose"
-Pypi = "https://pypi.org/project/iOSbackup"
+Homepage = "https://github.com/kjleitz/ios-backup-extractor"
+Source = "https://github.com/kjleitz/ios-backup-extractor"
+Issues = "https://github.com/kjleitz/ios-backup-extractor/issues/new/choose"
 
 [tool.setuptools.packages.find]
-include = ["iOSbackup*"]
+include = ["iOSbackup*", "NSKeyedUnArchiverLocal*"]
 
 [tool.setuptools.dynamic]
 version = {attr = "iOSbackup.__version__"}

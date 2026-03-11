@@ -1,23 +1,17 @@
-# iOSbackup
+# ios-backup-extractor
 
-A Python 3 class that reads and extracts files from a **password-encrypted iOS backup** created by iTunes on Mac and Windows.
-Initial support for unencrypted backups has been aded since version 0.9.923.
-Tested compatibility since iOS 10 up to current iOS 15.
+A Python 3 class that reads and extracts files from a **password-encrypted iOS backup** created by iTunes on Mac and Windows. Also supports unencrypted backups (since version 0.9.923). Tested with iOS 10 through iOS 15.
 
-You will need your backup password to decrypt the backup files, this is the password iTunes asks when it is configured to do encrypted backups. This password can be found on macOS’ Keychain Access app, under `login` keychain, entry `iOS Backup` (update: newer macOS apparently doesn’t store it in KayChain anymore).
+> **Fork notice:** This project is a fork of
+> [iOSbackup](https://github.com/avibrazil/iOSbackup) by Avi Alkalay, and
+> incorporates [NSKeyedUnArchiver](https://github.com/avibrazil/NSKeyedUnArchiver)
+> (also by Avi Alkalay). Licensed under GPL v3 — see [LICENSE](LICENSE).
+> If you find this software useful, please consider
+> [donating to the original author](https://github.com/avibrazil/iOSbackup#donation).
 
-You should always prefer encrypted backups because they are more secure and include more files from your device. Non-encrypted backups do not backup files as Health app database and other preciosities.
+You will need your backup password to decrypt the backup files, this is the password iTunes asks when it is configured to do encrypted backups. This password can be found on macOS’ Keychain Access app, under `login` keychain, entry `iOS Backup` (update: newer macOS apparently doesn’t store it in Keychain anymore).
 
-## Donation
-
-This software is essential for advanced device forensic activities or to anyone in need to dominate and extract full data from an iOS device.
-
-Please consider donation of any amount in Bitcoin or Ethereum:
-
-* Bitcoin donation: bc1qerzyzwdnsmpfdkl3lcjgm3rhvvy7svy0p89ndj
-* Ethereum donation: 0x098dADeDDf14382F19d4F5d989fD8734376B0224
-
-Thank you in advance
+You should always prefer encrypted backups because they are more secure and include more files from your device. Non-encrypted backups do not backup files such as the Health app database.
 
 ## Installation
 
@@ -26,12 +20,10 @@ Use a virtual environment to keep dependencies isolated:
 ```shell
 python3 -m venv .venv
 source .venv/bin/activate   # on Windows: .venv\Scripts\activate
-pip install iOSbackup
+pip install -e .
 ```
 
-`iOSbackup` requires `pycryptodome`, which will be installed automatically by `pip`.
-
-`pycryptodome` has an API compatible with older `pycrypto`, which should also work with `iOSbackup`. But `pycryptodome` is more well maintained and easier to install on Windows and macOS.
+`ios-backup-extractor` requires `pycryptodome`, which will be installed automatically by `pip`.
 
 
 ## Usage
