@@ -1,3 +1,6 @@
+# Copyright (C) 2025 Keegan Leitz <kjleitz@gmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 #!/usr/bin/env python3
 """
 Extract contacts from an iOS backup.

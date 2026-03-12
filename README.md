@@ -1,6 +1,6 @@
 # ios-backup-extractor
 
-A Python 3 class that reads and extracts files from a **password-encrypted iOS backup** created by iTunes on Mac and Windows. Also supports unencrypted backups (since version 0.9.923). Tested with iOS 10 through iOS 15.
+Reads and extracts files from a **password-encrypted iOS backup** created by iTunes/Finder on Mac and Windows.
 
 > **Fork notice:** This project is a fork of
 > [iOSbackup](https://github.com/avibrazil/iOSbackup) by Avi Alkalay, and
@@ -9,7 +9,7 @@ A Python 3 class that reads and extracts files from a **password-encrypted iOS b
 > If you find this software useful, please consider
 > [donating to the original author](https://github.com/avibrazil/iOSbackup#donation).
 
-You will need your backup password to decrypt the backup files, this is the password iTunes asks when it is configured to do encrypted backups. This password can be found on macOS’ Keychain Access app, under `login` keychain, entry `iOS Backup` (update: newer macOS apparently doesn’t store it in Keychain anymore).
+You will need your backup password to decrypt the backup files. This is the password iTunes/Finder asks for when it is configured to do encrypted backups. This password can be found on macOS’ Keychain Access app, under `login` keychain, entry `iOS Backup` (update: newer macOS apparently doesn’t store it in Keychain anymore).
 
 You should always prefer encrypted backups because they are more secure and include more files from your device. Non-encrypted backups do not backup files such as the Health app database.
 
@@ -25,266 +25,84 @@ pip install -e .
 
 `ios-backup-extractor` requires `pycryptodome`, which will be installed automatically by `pip`.
 
+## Quick Start
 
-## Usage
+### 1. Find your device UDID
 
-### Get list of backups available on your computer
-```python
->>> from iOSbackup import iOSbackup
-
->>> iOSbackup.getDeviceList()
-[{'udid': '00456030-000E4412342802E',
-  'name': 'mobileavi',
-  'ios': '13.2.3',
-  'serial': 'DNPPQRS0N4RW',
-  'type': 'iPhone12,3',
-  'encrypted': True},
-{'udid': '00654030-01234412342802E',
-  'name': 'ipad',
-  'ios': '13.1.3',
-  'serial': 'DABCRS0N4RW',
-  'type': 'iPad10,1',
-  'encrypted': True}]
+```shell
+python3 -c "from iOSbackup import iOSbackup; print(iOSbackup.getDeviceList())"
 ```
 
-### Open a device backup
+### 2. Extract everything
 
-Simply pass the UDID — you will be prompted for the password securely (it will not appear in your shell history or REPL transcript):
-```python
->>> b = iOSbackup(udid="00456030-000E4412342802E")
-Backup password:
+```shell
+python3 extractors/all.py --udid <UDID>
 ```
 
-Key derivation is slow by design (it's a PBKDF2 stretch). Once complete, save the derived key so you never have to enter your password again:
-```python
->>> b.getDecryptionKey()
-'dd6b6123494c5dbdff7804321fe43ffe1babcdb6074014afedc7cb47f351524'
+You'll be prompted for your backup password. This extracts contacts, messages
+(with attachments), and voicemails into `backup_export/` by default:
+
+```
+backup_export/
+    contacts/       — contacts (JSON + searchable HTML)
+    messages/       — conversations with attachments and an HTML viewer
+    voicemails/     — voicemails with transcriptions and an HTML player
 ```
 
-Store that key somewhere safe. On subsequent runs, pass it directly — this is both faster and avoids handling your raw password:
-```python
->>> b = iOSbackup(
-...     udid="00456030-000E4412342802E",
-...     derivedkey="dd6b6123494c5dbdff7804321fe43ffe1babcdb6074014afedc7cb47f351524"
-... )
+HEIC/HEIF attachments are automatically converted to JPEG (requires macOS).
+To skip that, pass `--no-convert-heic`.
+
+#### Options
+
+```
+--udid UDID          Device UDID (required)
+--derivedkey KEY     Skip password prompt by passing a saved decryption key
+--backuproot DIR     Custom backup folder (uses platform default if omitted)
+--output DIR         Output root folder (default: backup_export)
+--no-convert-heic    Skip HEIC-to-JPEG conversion
 ```
 
-> **Note:** `print(b)` no longer displays the decryption key — call `b.getDecryptionKey()` explicitly when you need it.
-### Linux virtual machine accessing iOS backup on a macOS host
+### 3. Save your decryption key
 
-Forcing a backup folder, useful when reading backups on Linux, where there is no standard for backup folders:
-```python
->>> b = iOSbackup(
-...     udid="00456030-000E4412342802E",
-...     backuproot='/media/sf_username/Library/Application Support/MobileSync/Backup'
-... )
-Backup password:
-```
-For this to work on a Linux virtual machine accessing a VirtualBox-shared folder, you'll have to grant full disk access to your hypervisor (VirtualBox etc).
-On macOS, go to *System Preferences* ➔ *Security & Privacy* ➔ *Privacy* ➔ *Full Disk Access* and enable access to your hypervisor (VirtualBox etc).
-The hypervisor and VM will have to be restarted for the new setting to be effective.
-
-You can also copy your device's backup folder, from a Windows or macOS computer, to a Linux computer, and then use this class on Linux to decrypt and read it.
-
-### iTunes default backup folders on Windows and macOS
-
-Files app (formerly iTunes) on macOS stores backups of associated devices under `~/Library/Application Support/MobileSync/Backup`.
-iTunes on Windows stores backups of associated devices under `%HOME%\Apple Computer\MobileSync\Backup`
-
-### Get some info about device on the backup
-Information about device, model, serial number, its SIMs, iOS version etc can be inspected in
-multiple places from backup basic catalog files (plist files), even before diving into its
-vast amount of databases and other encrypted files.
+Key derivation is slow by design. After the first run, save the derived key
+so you can skip the password prompt on future runs:
 
 ```python
-b=iOSbackup(...)
-
-# Device info
-infoKeys=[
-	# This is a non-exaustive list of interesting info, but there are more...
-	'Build Version', 'Device Name', 'Display Name', 'GUID', 'ICCID', 'ICCID 2',
-	'IMEI', 'IMEI 2', 'Last Backup Date', 'MEID', 'Phone Number', 'Phone Number 2',
-	'Product Name', 'Product Type', 'Product Version', 'Serial Number',
-	'Target Identifier', 'Target Type', 'Unique Identifier',
-	'macOS Build Version', 'macOS Version'
-]
-for i in infoKeys:
-	print(f'{i}: {b.info[i]}')
-
-
-# Other ways to get device info
-b.manifest['Lockdown']['DeviceName'] # device name or hostname
-b.manifest['Lockdown']['ProductVersion'] # iOS version as 14.0.1, see Version column of https://en.wikipedia.org/wiki/IOS_version_history#Version_history
-b.manifest['Lockdown']['BuildVersion'] # iOS version as 18A393, see Build column of https://en.wikipedia.org/wiki/IOS_version_history#Version_history
-b.manifest['Lockdown']['SerialNumber'] # device serial number
-b.manifest['Lockdown']['ProductType'] # device type as iPhone12,3, see columns Identifier of https://www.theiphonewiki.com/wiki/Models
-b.udid # UDID of the device
-b.uuid.hex() # UUID of device
-
-# Backup info
-b.backupRoot # backup root folder
-b.date # UTC date and time of this backup
-b.getDecryptionKey() # password-derived key of backup
-b.manifest['IsEncrypted'] # is it an encrypted backup?
-b.manifest['WasPasscodeSet'] # backup has a passcode?
-b.status
-
-
-# Basic list of installed apps, probably used by iTunes to easily display things to users
-b.info['Applications'].keys()
-
-# Apps icons
-png_data=b.info['Applications']['com.burbn.instagram']['PlaceholderIcon']
-
-# Dive into device content
-b.manifest['ManifestKey'].hex() # manifest DB decryption key
-b.manifest['Applications'] # list of installed apps
-b.manifestDB # decrypted copy of Manifest.db SQLite database
+from iOSbackup import iOSbackup
+b = iOSbackup(udid="<UDID>")
+print(b.getDecryptionKey())  # save this hex string
 ```
 
-### Get a list of backed-up files:
-Info available in the `Manifest.db` which relates backup file hash to semi-full path of file into the device, plus file backup domain, plus some file metadata.
-```python
->>> b.getBackupFilesList()
-[{'name': '',
-  'backupFile': 'abfbc8747bfbb373e2b08ce67b1255ffda4e1b91',
-  'domain': 'AppDomain-4GU63N96WE.com.p5sys.jumpdesktop',
-  'relativePath': '',
-  'flags': 2,
-  'file': b'bplist00\xd4...'
-  },
- {'name': 'Documents',
-  'backupFile': 'ec0c1b379560bb5ccc81ee783538fd51cfd97461',
-  'domain': 'AppDomain-4GU63N96WE.com.p5sys.jumpdesktop',
-  'relativePath': 'Documents',
-  'flags': 2,
-  'file': b'bplist00\xd4...'
-  },
- {'name': 'Documents/Servers',
-  'backupFile': 'a735380eade71b48f0fe27d38a283aacd8ed8372',
-  'domain': 'AppDomain-4GU63N96WE.com.p5sys.jumpdesktop'},
- {'name': 'Documents/extensions',
-  'backupFile': 'c08f725cc39ec819ab7ced3b056f4e0630ead09f',
-  'domain': 'AppDomain-4GU63N96WE.com.p5sys.jumpdesktop'},
- {'name': 'Library',
-  'backupFile': 'e60a6345697594c735e5a6ed86c0d57dad6a2176',
-  'domain': 'AppDomain-4GU63N96WE.com.p5sys.jumpdesktop'},
- ...]
+Then pass it on subsequent runs:
+
+```shell
+python3 extractors/all.py --udid <UDID> --derivedkey <KEY>
 ```
 
-`backupFile` is the file name on your computer. Basically SHA1([Domain]/[FilePath]).
+### 4. Convert HEIC images after the fact
 
-`name` is the original semi-complete path of file name in the device.
+If you already extracted messages without HEIC conversion (or used one of the
+individual extractors), you can convert them separately:
 
-`domain` is the file group this file is member, see bellow list of domains.
-
-`file` is binary plist content with some file metadata.
-
-Or put it directly into a Pandas DataFrame for easier manipulation and searching:
-```python
->>> import pandas as pd
->>> backupfiles=pd.DataFrame(b.getBackupFilesList(), columns=['backupFile','domain','name'])
+```shell
+python3 extractors/convert_heic.py backup_export/messages
 ```
 
-With Pandas, display only list of files in `HomeDomain` group:
-```python
->>> backupfiles[backupfiles['domain']=='HomeDomain']
+This finds all `.heic`/`.heif` files under the folder, converts them to JPEG,
+and updates references in `conversation.html` and `conversation.json`.
+
+### Running individual extractors
+
+You can also run each extractor independently:
+
+```shell
+python3 extractors/contacts.py   --udid <UDID> [--output contacts]
+python3 extractors/messages.py   --udid <UDID> [--output messages] [--convert-heic] [--contacts contacts]
+python3 extractors/voicemails.py --udid <UDID> [--output voicemails] [--contacts contacts]
 ```
 
-### Get a decrypted copy of the call history SQLite database:
-The `getFileDecryptedCopy()` method creates a decrypted copy of requested file on `targetFolder/targetName`.
-If `targetFolder` and `targetName` aren't given, a temporary file will be created.
-The name of decrypted file (temporary or not) can be found in the `decryptedFilePath` item of returned dict, as seen below.
-
-```python
->>> file=b.getFileDecryptedCopy(relativePath="Library/CallHistoryDB/CallHistory.storedata")
->>> file
-{'decryptedFilePath': 'HomeDomain~Library--CallHistoryDB--CallHistory.storedata',
- 'domain': 'HomeDomain',
- 'originalFilePath': 'Library/CallHistoryDB/CallHistory.storedata',
- 'backupFile': '5a4935c78a5255723f707230a451d79c540d2741',
- 'size': 1228800}
-```
-
-Fetch call records from the decrypted copy of call history database, using a SQL query.
-```python
->>> calls = sqlite3.connect(file['decryptedFilePath'])
->>> calls.row_factory=sqlite3.Row
->>> calllog = calls.cursor().execute(f"SELECT * FROM ZCALLRECORD ORDER BY ZDATE DESC").fetchall()
-```
-
-### Restore Entire Folder Containing _Photos_ and their Metadata
-This content is located in the `Media` folder of `CameraRollDomain` domain.
-This example will exclude videos from restoration.
-```python
->>> b.getFolderDecryptedCopy(
-	'Media',
-	targetFolder='restored-photos',
-	includeDomains='CameraRollDomain',
-	excludeFiles='%.MOV'
-)
-```
-
-### Restore an entire domain
-Here we restore all files of `WirelessDomain` in a hierarchy starting at local directory:
-```python
->>> b.getFolderDecryptedCopy(
-	includeDomains='WirelessDomain',
-)
-```
-Here we restore all files of `HomeDomain` in a hierarchy starting at folder `my-folder`:
-```python
->>> b.getFolderDecryptedCopy(
-	includeDomains='HomeDomain',
-	targetFolder='my-folder',
-)
-```
-To restore all backed up data files of an app, search for its domain name (see below) and use this technique.
-
-
-### Get List of All Installed Apps
-```python
->>> apps=list(b.manifest['Applications'].keys())
->>> apps
-['group.com.apple.Maps',
- 'group.net.whatsapp.family',
- 'it.joethefox.XBMC-Remote',
- 'com.google.GoogleMobile.NotificationContentExtension',
- 'group.com.dendrocom.uniconsole',
- ...
-]
-```
-
-### Get List of All Apps, Groups and Plugins with “_whatsapp_” In Their Name
-```python
->>> [s for s in list(b.manifest['Applications'].keys()) if "whatsapp" in s]
-['group.net.whatsapp.WhatsApp.shared',
- 'net.whatsapp.WhatsApp.ShareExtension',
- 'group.net.whatsapp.WhatsAppSMB.shared',
- 'net.whatsapp.WhatsApp.NotificationExtension',
- 'net.whatsapp.WhatsApp.Intents',
- 'net.whatsapp.WhatsApp.TodayExtension',
- 'net.whatsapp.WhatsApp.IntentsUI',
- 'group.net.whatsapp.WhatsApp.private',
- 'net.whatsapp.WhatsApp.ServiceExtension',
- 'net.whatsapp.WhatsApp']
-```
-
-### Restore All Files of Apps, Groups and Plugins Matching “_whatsapp_”
-I had to use previous method to find the list of app IDs and see that “_whatsapp_” is a good word to match them.
-Each app component has its own backup domain prefixed by `AppDomain`, `AppDomainGroup` or `AppDomainPlugin`.
-So we'll iterate over all possibilities of fabricated domain names with `getFolderDecryptedCopy()`.
-```python
-for id in [s for s in list(b.manifest['Applications'].keys()) if "whatsapp" in s]:
-    for prefix in ["AppDomain", "AppDomainGroup", "AppDomainPlugin"]:
-        b.getFolderDecryptedCopy(includeDomains=prefix + '-' + id)
-```
-Other apps might have a less intuitive name. For example, Telegram can be matched by “_telegra_” (without ‘m’):
-```python
-for id in [s for s in list(b.manifest['Applications'].keys()) if "telegra" in s]:
-    for prefix in ["AppDomain", "AppDomainGroup", "AppDomainPlugin"]:
-        b.getFolderDecryptedCopy(includeDomains=prefix + '-' + id)
-```
+The `--contacts` flag tells messages/voicemails where to find the contacts
+output so they can resolve display names and generate cross-links.
 
 ## Security
 
@@ -320,106 +138,6 @@ This fork fixes several security and correctness issues present in the original 
 **Logic bug: `finished` flag reset mid-loop**
 - Inside the UID-resolution loop, a `finished=True` assignment in the `elif dict/list` branch could reset the flag set by an earlier `plistlib.UID` key in the same pass. This caused the while-loop to exit before all UIDs were resolved, leaving unresolved `plistlib.UID` objects in the output. Fixed by removing the premature reset.
 
-## Apple-native Python 3 Installation on Macs
+## iOSbackup documentation
 
-Follow my guide at https://avi.alkalay.net/2019/12/macos-jupyter-data-science-no-anaconda.html
-
-Basically use command `xcode-select --install` to get Python 3 installed and updated by Apple on your Mac.
-
-## List of Domains
-
-Domain | Contains
---- | ---
-**AppDomain-...** | Backup of each installed app's files
-**AppDomainGroup-...** | Backup of each installed app's files
-**AppDomainPlugin-...** | Backup of each installed app's files
-**CameraRollDomain** | Photos
-**DatabaseDomain** |
-**HealthDomain** | Health app databases
-**HomeDomain** | Many interesting databases, such as contacts and call history
-**HomeKitDomain** |
-**InstallDomain** |
-**KeyboardDomain** |
-**KeychainDomain** |
-**ManagedPreferencesDomain** |
-**MediaDomain** |
-**MobileDeviceDomain** |
-**RootDomain** |
-**SysContainerDomain-com.apple.Preferences.SettingsSpotlightIndexExtension** |
-**SysContainerDomain-com.apple.Preferences.indexSettingsManifests** |
-**SysContainerDomain-com.apple.accessibility.AccessibilityUIServer** |
-**SysContainerDomain-com.apple.adid** |
-**SysContainerDomain-com.apple.akd** |
-**SysContainerDomain-com.apple.appstored** |
-**SysContainerDomain-com.apple.apsd** |
-**SysContainerDomain-com.apple.backboardd** |
-**SysContainerDomain-com.apple.fairplayd.H2** |
-**SysContainerDomain-com.apple.geod** |
-**SysContainerDomain-com.apple.icloud.findmydeviced** |
-**SysContainerDomain-com.apple.icloud.ifccd** |
-**SysContainerDomain-com.apple.icloud.searchpartyd** |
-**SysContainerDomain-com.apple.lsd** |
-**SysContainerDomain-com.apple.lskdd** |
-**SysContainerDomain-com.apple.metrickitd** |
-**SysContainerDomain-com.apple.mobilesafari** | Bookmarks and cookies ?
-**SysContainerDomain-com.apple.springboard** |
-**SysSharedContainerDomain-systemgroup.com.apple.AssetCacheServices.diskCache** |
-**SysSharedContainerDomain-systemgroup.com.apple.DiagnosticsKit** |
-**SysSharedContainerDomain-systemgroup.com.apple.ReportMemoryException** |
-**SysSharedContainerDomain-systemgroup.com.apple.VideoSubscriberAccount** |
-**SysSharedContainerDomain-systemgroup.com.apple.WiFiAssist** |
-**SysSharedContainerDomain-systemgroup.com.apple.bluetooth** |
-**SysSharedContainerDomain-systemgroup.com.apple.cfpreferences.managed** |
-**SysSharedContainerDomain-systemgroup.com.apple.configurationprofiles** |
-**SysSharedContainerDomain-systemgroup.com.apple.coreanalytics** |
-**SysSharedContainerDomain-systemgroup.com.apple.icloud.findmydevice.managed** |
-**SysSharedContainerDomain-systemgroup.com.apple.icloud.fmipcore.MockingContainer** |
-**SysSharedContainerDomain-systemgroup.com.apple.icloud.ifccd** |
-**SysSharedContainerDomain-systemgroup.com.apple.icloud.searchpartyd.sharedsettings** |
-**SysSharedContainerDomain-systemgroup.com.apple.itunesu.shared** |
-**SysSharedContainerDomain-systemgroup.com.apple.lsd** |
-**SysSharedContainerDomain-systemgroup.com.apple.lsd.iconscache** |
-**SysSharedContainerDomain-systemgroup.com.apple.lskdrl** |
-**SysSharedContainerDomain-systemgroup.com.apple.media.books.managed** |
-**SysSharedContainerDomain-systemgroup.com.apple.media.shared.books** |
-**SysSharedContainerDomain-systemgroup.com.apple.mobile.installationhelperlogs** |
-**SysSharedContainerDomain-systemgroup.com.apple.mobilegestaltcache** |
-**SysSharedContainerDomain-systemgroup.com.apple.nsurlstoragedresources** |
-**SysSharedContainerDomain-systemgroup.com.apple.ondemandresources** |
-**SysSharedContainerDomain-systemgroup.com.apple.osanalytics** |
-**SysSharedContainerDomain-systemgroup.com.apple.sharedpclogging** |
-**SystemPreferencesDomain** |
-**TonesDomain** |
-**WirelessDomain** |
-
-## Interesting Files
-
-Backup file | Domain | File name | Contains
---- | --- | --- | ---
-ed1f8fb5a948b40504c19580a458c384659a605e | WirelessDomain | Library/Databases/CellularUsage.db | Table `subscriber_info` apparently contains all SIM phone numbers ever inserted in the phone since about iOS 11 or 12. Data here is related to `Library/Preferences/com.apple.commcenter.plist`.
-0d609c54856a9bb2d56729df1d68f2958a88426b | WirelessDomain | Library/Databases/DataUsage.sqlite | A rich database that apparently contains app WWAN usage through time. Chack tables `ZPROCESS` and `ZLIVEUSAGE`.
-1570a95f5dc7f4cd6b54bc17c427eda95288b8fa | HomeDomain | Library/SpringBoard/LockVideo.mov | Video used as background on lock screen
-. | HomeDomain | Library/Passes/Cards/* | Wallet passes and items
-8d0167b67f664a3816b4c00115c2dfa6a8f81388 |WirelessDomain | Library/Preferences/com.apple.AppleBasebandManager.Statistics.plist | Apparently contains times of last boot and restores.
-dafec408e48be2700704dd3e763014c39f6de6b3 | WirelessDomain | Library/Preferences/com.apple.AppleBasebandManager.plist
-9329979c8298f9cd3fb110fa387570a8b957e912 | WirelessDomain | Library/Preferences/com.apple.CommCenter.counts.plist | Has `CellularBytesRecved` and `CellularBytesSent`
-3dec38ca46c9e37ffebacf2611463eb47a65eb09 | WirelessDomain | Library/Preferences/com.apple.commcenter.audio.plist
-7e5f642f6da5e2345c0893bdf944da9c53902756 | WirelessDomain | Library/Preferences/com.apple.commcenter.callservices.plist
-bfecaa9c467e3acb085a5b312bd27bdd5cd7579a | WirelessDomain | Library/Preferences/com.apple.commcenter.plist | Cellular network informations and configurations, including all ever inserted SIM and eSIM cards, their phone numbers and nicknames as configured under Settings➔Celular. Data here is related to `Library/Databases/CellularUsage.db` 
-160600e9c2e408c69e4193d325813a2a885bce2a | WirelessDomain | Library/Preferences/com.apple.ipTelephony.plist |
-12b144c0bd44f2b3dffd9186d3f9c05b917cee25 | CameraRollDomain | Media/PhotoData/Photos.sqlite | Photo library data, albums, tagged faces, moments, places, geolocations, date and times, formats etc.
-. | CameraRollDomain | Media/DCIM/*APPLE | Original master photos/videos taken by your camera or imported through AirDrop etc
-. | CameraRollDomain | Media/PhotoData/Mutations/DCIM/*APPLE | Edited version of photos/videos
-. | HomeDomain | Library/Mobile Documents/iCloud~... | Apps documents on iCloud
-. | HomeDomain | Library/Mobile Documents/com\~apple\~CloudDocs/... | Documents folder on iCloud
-5a4935c78a5255723f707230a451d79c540d2741 | HomeDomain | Library/CallHistoryDB/CallHistory.storedata | Call History database with only the last 600 calls
-31bb7ba8914766d4ba40d6dfb6113c8b614be442 | HomeDomain | Library/AddressBook/AddressBook.sqlitedb | User contacts and address book. Table `ABPerson` is the central one with facts about contact creation and modification, while `ABMultiValue*` tables contain contact details.
-cd6702cea29fe89cf280a76794405adb17f9a0ee | HomeDomain | Library/AddressBook/AddressBookImages.sqlitedb | Contact photos
-9db3e5a6f1672cc306cd785809811e79cc43a2f8 | HomeDomain | Library/AddressBook/backup/AddressBook.sqlitedb
-2a87d5bcdb9753f1462dd1e929b17e6a971c5b01 | HomeDomain | Library/AddressBook/backup/AddressBookImages.sqlitedb
-1a0e7afc19d307da602ccdcece51af33afe92c53 | HomeDomain | Library/Safari/History.db
-. | MediaDomain | Library/SMS/Attachments/*
-. | MediaDomain | Library/SMS/StickerCache/*
-. | . | Library/Caches/locationd/consolidated.db | Apparently list of known iBeacons
-
-
+See [the original iOSbackup repo](https://github.com/avibrazil/iOSbackup) by Avi Alkalay.

@@ -1,3 +1,6 @@
+# Copyright (C) 2025 Keegan Leitz <kjleitz@gmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Tests for extractors.all — the unified extract-everything entry point."""
 
 import os

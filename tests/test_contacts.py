@@ -1,3 +1,6 @@
+# Copyright (C) 2025 Keegan Leitz <kjleitz@gmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Tests for extractors/contacts.py pure functions."""
 
 from extractors.contacts import _normalize_phone, _sanitize_folder, _escape

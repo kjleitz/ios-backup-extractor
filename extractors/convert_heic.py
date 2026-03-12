@@ -1,3 +1,6 @@
+# Copyright (C) 2025 Keegan Leitz <kjleitz@gmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 #!/usr/bin/env python3
 """
 Convert HEIC/HEIF files to JPEG in an already-extracted messages folder.

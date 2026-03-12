@@ -1,3 +1,6 @@
+# Copyright (C) 2025 Keegan Leitz <kjleitz@gmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Tests for extractors.convert_heic — standalone HEIC-to-JPEG conversion."""
 
 import os

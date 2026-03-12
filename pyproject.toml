@@ -6,6 +6,7 @@ license-files = [ "LICENSE" ]
 requires-python = ">=3.7"
 authors = [
     { name = "Keegan Leitz", email = "kjleitz@gmail.com" },
+    { name = "Avi Alkalay", email = "avibrazil@gmail.com" },
 ]
 dynamic = ["version"]
 
