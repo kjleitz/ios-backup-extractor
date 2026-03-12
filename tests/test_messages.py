@@ -1,3 +1,6 @@
+# Copyright (C) 2025 Keegan Leitz <kjleitz@gmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Tests for extractors/messages.py pure functions and conversation loading."""
 
 import sqlite3

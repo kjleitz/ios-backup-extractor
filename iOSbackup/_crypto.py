@@ -1,3 +1,10 @@
+# Copyright (C) 2020 Avi Alkalay <avibrazil@gmail.com>
+# Copyright (C) 2025 Keegan Leitz <kjleitz@gmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# This file is part of ios-backup-extractor, a fork of iOSbackup.
+# Refactored from iOSbackup/__init__.py, 2025 by Keegan Leitz.
+
 import struct
 
 try:
